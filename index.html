@@ -1,17 +1,992 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Plainsight Data analysis — your numbers, explained</title>
-    <!-- The component injects its own styles; this only sets the page background
-         so there's no white flash before React mounts. -->
-    <style>
-      html, body { margin: 0; background: #F2F5F1; }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plainsight Data analysis — your numbers, explained</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+  :root {
+    --paper:#F2F5F1; --card:#FFFFFF; --ink:#17322B; --ink-soft:#4C6159;
+    --line:#D8E2DC; --gain:#1F9D5B; --loss:#C4472B; --accent-soft:#E3F0E8;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --display:'Space Grotesk','Avenir Next','Segoe UI',sans-serif;
+    --body:'Inter','Helvetica Neue',Arial,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--body); padding:0 16px 64px; }
+  .wrap { max-width:880px; margin:0 auto; }
+  header { padding:36px 0 20px; display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  .brand { font-family:var(--display); font-weight:700; font-size:30px; letter-spacing:-0.02em; }
+  .tagline { color:var(--ink-soft); font-size:14px; margin-top:4px; }
+  .btn { font-family:var(--display); font-weight:700; font-size:14px; border-radius:8px; padding:10px 18px;
+    cursor:pointer; border:1px solid var(--ink); background:transparent; color:var(--ink); }
+  .btn.primary { background:var(--ink); color:var(--paper); }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.6; cursor:default; }
+  .btn:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--gain); outline-offset:2px; }
+  select { font-family:var(--mono); font-size:13px; color:var(--ink); background:var(--card);
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  .drop { border:2px dashed var(--line); background:var(--card); border-radius:12px; padding:56px 24px; text-align:center; }
+  .drop.over { border-color:var(--gain); background:var(--accent-soft); }
+  .drop h2 { font-family:var(--display); font-weight:700; font-size:20px; margin:0 0 8px; }
+  .drop p { color:var(--ink-soft); font-size:14px; margin:0 0 20px; }
+  .drop .row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .fineprint { margin-top:22px; font-size:12px; color:var(--ink-soft); }
+  .error { margin-top:18px; color:var(--loss); font-size:14px; }
+  .pickers { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:22px; font-size:13px; color:var(--ink-soft); }
+  .filemeta { font-family:var(--mono); font-size:12px; color:var(--ink-soft); }
+  .receipt { position:relative; background:var(--card); border:1px solid var(--line); border-radius:4px;
+    padding:20px 24px 24px; margin-bottom:34px; }
+  .receipt::after { content:""; position:absolute; left:0; right:0; bottom:-8px; height:8px;
+    background:linear-gradient(-45deg,transparent 6px,var(--card) 0) 0 0/12px 8px repeat-x,
+               linear-gradient(45deg,transparent 6px,var(--card) 0) 6px 0/12px 8px repeat-x; }
+  .receipt .head { font-family:var(--mono); font-size:11px; letter-spacing:.12em; color:var(--ink-soft);
+    text-transform:uppercase; margin-bottom:14px; }
+  .stats { display:flex; gap:32px; flex-wrap:wrap; }
+  .stat .label { font-family:var(--mono); font-size:12px; color:var(--ink-soft); }
+  .stat .value { font-family:var(--mono); font-size:30px; font-weight:500; }
+  .stat .sub { font-family:var(--mono); font-size:13px; }
+  .gain { color:var(--gain); } .loss { color:var(--loss); }
+  .charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:20px; margin-bottom:30px; }
+  .chartcard { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  .chartcard h3 { font-family:var(--display); font-weight:700; font-size:15px; margin:0 0 12px; }
+  .chartbox { position:relative; height:220px; }
+  .sectitle { font-family:var(--display); font-weight:700; font-size:19px; }
+  .secrow { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+  .hint { color:var(--ink-soft); font-size:14px; }
+  .headline { font-family:var(--display); font-weight:700; font-size:16px; background:var(--accent-soft);
+    border-left:4px solid var(--gain); padding:12px 16px; border-radius:0 8px 8px 0; margin-bottom:16px; }
+  .cards { display:grid; gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 18px; }
+  .card .tag { font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:6px; }
+  .card .body { font-size:15px; line-height:1.55; }
+  .card.warn { border-color:var(--loss); } .card.warn .tag { color:var(--loss); }
+  .qa-item .q { font-family:var(--mono); font-size:13px; color:var(--ink-soft); margin-bottom:6px; }
+  .promptbox { background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; margin-bottom:16px; }
+  .promptbox .head2 { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; font-size:14px; }
+  .promptbox .head2 .btn { padding:6px 12px; font-size:13px; }
+  .promptbox .status { flex:1; min-width:180px; }
+  .promptbox .status.ok { color:var(--gain); font-weight:600; }
+  .promptbox .status.warn { color:var(--loss); font-weight:600; }
+  .promptbox textarea { width:100%; min-height:190px; font-family:var(--mono); font-size:12px;
+    line-height:1.5; border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    background:var(--paper); color:var(--ink); resize:vertical; }
+  a.btn { text-decoration:none; display:inline-block; }
+  .btnrow { display:flex; gap:10px; flex-wrap:wrap; }
+  /* Wraps because this row carries two buttons — without it the second one
+     pushes past the viewport on a phone and the whole page scrolls sideways. */
+  .askrow { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
+  .askrow input { flex:1 1 220px; min-width:0; font-family:var(--body); font-size:14px; padding:10px 12px;
+    border:1px solid var(--line); border-radius:8px; color:var(--ink); background:var(--card); }
+  /* model settings */
+  .btn.small { padding:6px 12px; font-size:13px; }
+  .settings-toggle { display:flex; align-items:center; gap:8px; max-width:280px; }
+  .settings-toggle .label { font-family:var(--mono); font-size:12px; font-weight:400;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; display:inline-block;
+    background:var(--ink-soft); }
+  .dot.ok { background:var(--gain); }
+  .dot.bad, .dot.warn { background:var(--loss); }
+  .settings { background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:18px 20px; margin-bottom:24px; font-size:13px; }
+  .settings-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+  .srow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .slabel { font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-soft); width:96px; flex-shrink:0; }
+  .srow input { font-family:var(--mono); font-size:12px; padding:6px 8px; border:1px solid var(--line);
+    border-radius:6px; color:var(--ink); background:var(--card); }
+  #baseUrlInput { width:230px; }
+  #timeoutInput { width:80px; }
+  .settings-status { margin-top:16px; padding-top:14px; border-top:1px solid var(--line);
+    display:flex; gap:8px; align-items:flex-start; line-height:1.55; color:var(--ink-soft); }
+  .settings-status .dot { margin-top:5px; }
+  .settings-status.ok { color:var(--gain); }
+  .settings-status.bad, .settings-status.warn { color:var(--loss); }
+  .needs-model { background:var(--accent-soft); border-left:4px solid var(--gain);
+    border-radius:0 8px 8px 0; padding:12px 16px; margin-bottom:16px; font-size:14px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .hidden { display:none !important; }
+  section { margin-bottom:34px; }
+  @media print {
+    .no-print { display:none !important; }
+    .receipt::after { display:none; }
+    body { background:#fff; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="brand">Plainsight Data analysis</div>
+      <div class="tagline">Your numbers, explained in plain English. No formulas, no SQL.</div>
+    </div>
+    <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <!-- Always visible: the model is worth choosing before a file is loaded. -->
+      <button class="btn settings-toggle" id="settingsToggle" aria-expanded="false" aria-controls="settingsPanel">
+        <span class="dot" id="connDot"></span>
+        <span class="label" id="connLabel">No model</span>
+        <span aria-hidden="true" style="font-size:11px;">▼</span>
+      </button>
+      <span id="headerBtns" class="hidden" style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn primary" onclick="exportCSV()">Export CSV</button>
+        <button class="btn" onclick="window.print()">Print report</button>
+        <button class="btn" onclick="resetApp()">Load a different file</button>
+      </span>
+    </div>
+  </header>
+
+  <!-- model settings -->
+  <section class="settings hidden no-print" id="settingsPanel">
+    <div class="settings-head">
+      <div class="sectitle" style="font-size:16px;">Model settings</div>
+      <button class="btn small" id="settingsClose">Close</button>
+    </div>
+
+    <div class="srow">
+      <span class="slabel">Analyst</span>
+      <select id="providerSel" aria-label="AI provider"></select>
+    </div>
+
+    <div class="srow" id="addressRow">
+      <span class="slabel">Address</span>
+      <input id="baseUrlInput" spellcheck="false" aria-label="Server address">
+      <button class="btn small" id="connectBtn">Connect</button>
+    </div>
+
+    <div class="srow" id="modelRow">
+      <span class="slabel">Model</span>
+      <select id="modelSel" aria-label="Model"></select>
+      <span class="hint" id="modelHint">Connect to load the model list.</span>
+    </div>
+
+    <div class="srow" id="timeoutRow" style="margin-bottom:0;">
+      <span class="slabel">Timeout</span>
+      <input id="timeoutInput" type="number" min="10" max="900" aria-label="Response timeout in seconds">
+      <span class="hint">seconds before giving up on a reply</span>
+    </div>
+
+    <div class="settings-status">
+      <span class="dot" id="connDot2"></span>
+      <span id="connMessage"></span>
+    </div>
+  </section>
+
+  <!-- upload -->
+  <section id="uploadSec">
+    <div class="drop" id="dropZone">
+      <h2>Drop a CSV of your sales here</h2>
+      <p>Exports from Square, Shopify, Excel, or any spreadsheet work. Needs a header row and at least one number column.</p>
+      <div class="row">
+        <button type="button" class="btn primary" onclick="document.getElementById('fileInput').click()">Choose a file</button>
+        <input type="file" id="fileInput" accept=".csv,text/csv" style="display:none;">
+        <button class="btn" onclick="loadSample()">Try sample data</button>
+      </div>
+      <div class="error hidden" id="parseError"></div>
+      <div class="fineprint">Your file is read in your browser. Only small aggregate totals are sent for AI analysis — never your raw rows.</div>
+    </div>
+  </section>
+
+  <!-- dashboard -->
+  <div id="dash" class="hidden">
+    <section class="pickers no-print">
+      <span class="filemeta" id="fileMeta"></span>
+      <label>Analyze <select id="metricSel"></select></label>
+      <label id="dateWrap">over <select id="dateSel"></select></label>
+      <label id="catWrap">split by <select id="catSel"></select></label>
+    </section>
+
+    <section class="receipt">
+      <div class="head" id="receiptHead"></div>
+      <div class="stats" id="stats"></div>
+    </section>
+
+    <section class="charts" id="charts">
+      <div class="chartcard" id="timeCard"><h3 id="timeTitle"></h3><div class="chartbox"><canvas id="timeChart"></canvas></div></div>
+      <div class="chartcard" id="catCard"><h3 id="catTitle"></h3><div class="chartbox"><canvas id="catChart"></canvas></div></div>
+    </section>
+
+    <section>
+      <div class="secrow">
+        <div class="sectitle">What your data says</div>
+        <div class="btnrow no-print">
+          <button class="btn" id="copyPromptBtn">Copy prompt for Claude</button>
+          <button class="btn primary" id="insightBtn" onclick="runInsights()">Explain my data</button>
+        </div>
+      </div>
+
+      <!-- Manual path: works with no API access at all — copy the prompt, paste it into any Claude chat. -->
+      <div class="promptbox hidden no-print" id="promptBox">
+        <div class="head2">
+          <span class="status" id="copyStatus"></span>
+          <button class="btn" id="copyAgainBtn">Copy again</button>
+          <a class="btn" id="openClaudeBtn" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">Open Claude</a>
+          <button class="btn" id="hidePromptBtn">Hide</button>
+        </div>
+        <textarea id="promptPreview" readonly spellcheck="false"></textarea>
+        <div class="fineprint">This is exactly what gets copied — aggregate totals only, never your individual rows.</div>
+      </div>
+
+      <div class="needs-model hidden no-print" id="needsModel">
+        <span>No analyst connected. Charts, export, and Copy prompt for Claude all work without one.</span>
+        <button class="btn small" id="openSettingsBtn">Open settings</button>
+      </div>
+
+      <div class="hint" id="insightHint">One click gets you a plain-English readout: what's growing, what's slipping, and what to check next. No API access? Use <strong>Copy prompt for Claude</strong> and paste it into a chat.</div>
+      <div class="error hidden" id="insightError"></div>
+      <div id="insightOut"></div>
+    </section>
+
+    <section>
+      <div class="sectitle">Ask a question</div>
+      <div class="hint" style="margin-top:6px;">In your own words — "which month was slowest?", "is online growing?", "what should I stock more of?"</div>
+      <div class="cards" id="qaList" style="margin-top:14px;"></div>
+      <div class="askrow no-print">
+        <input id="qInput" placeholder="Type a question about your data" onkeydown="if(event.key==='Enter')runQuestion()">
+        <button class="btn" id="copyQuestionBtn">Copy for Claude</button>
+        <button class="btn primary" id="askBtn" onclick="runQuestion()">Ask</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ---------------- state ---------------- */
+let rows = null, fileName = "", cols = { dateCols:[], numCols:[], catCols:[] };
+let dateCol = "", metricCol = "", catCol = "";
+let summary = null, insights = null;
+let timeChartObj = null, catChartObj = null;
+
+const SAMPLE_CSV = `date,product,region,revenue,units
+2025-01-14,Espresso beans,North,1840,92
+2025-01-22,Cold brew kit,Online,960,32
+2025-02-03,Espresso beans,North,2110,105
+2025-02-17,Mugs & merch,South,430,43
+2025-02-25,Cold brew kit,Online,1280,41
+2025-03-05,Espresso beans,North,1990,99
+2025-03-19,Mugs & merch,Online,610,61
+2025-03-28,Cold brew kit,South,1450,47
+2025-04-08,Espresso beans,North,2340,117
+2025-04-21,Cold brew kit,Online,1710,55
+2025-05-06,Espresso beans,North,2205,110
+2025-05-14,Mugs & merch,South,380,38
+2025-05-27,Cold brew kit,Online,2050,66
+2025-06-09,Espresso beans,North,2510,124
+2025-06-18,Cold brew kit,Online,2380,77
+2025-06-30,Mugs & merch,Online,540,54
+2025-07-07,Espresso beans,North,1780,89
+2025-07-15,Cold brew kit,Online,2860,92
+2025-07-29,Mugs & merch,South,290,29
+2025-08-05,Espresso beans,North,1655,83
+2025-08-19,Cold brew kit,Online,3120,101
+2025-09-02,Espresso beans,North,2050,102
+2025-09-16,Cold brew kit,Online,2440,79
+2025-09-29,Mugs & merch,Online,720,72
+2025-10-08,Espresso beans,North,2620,131
+2025-10-21,Cold brew kit,Online,1980,64
+2025-11-04,Espresso beans,North,2980,149
+2025-11-17,Mugs & merch,South,910,91
+2025-11-26,Cold brew kit,Online,1620,52
+2025-12-03,Espresso beans,North,3410,170
+2025-12-15,Mugs & merch,Online,1240,124
+2025-12-22,Cold brew kit,Online,1490,48`;
+
+/* ---------------- helpers ---------------- */
+const $ = (id) => document.getElementById(id);
+const toNum = (v) => {
+  if (v === null || v === undefined) return NaN;
+  let s = String(v).trim().replace(/[$,€£₱%\s]/g, "");
+  if (s === "") return NaN;                    // a blank cell is missing, not zero
+  let sign = 1;
+  if (/^\(.*\)$/.test(s)) { sign = -1; s = s.slice(1, -1); }  // (1,200) = -1200 in accounting exports
+  const n = Number(s);
+  return isFinite(n) ? n * sign : NaN;
+};
+// Bucket a date value into "YYYY-MM". Date-only ISO strings are parsed as UTC
+// midnight but read back with local getters, which shifts them a day west of
+// Greenwich — so read those off the string instead of going through Date.
+const monthKey = (v) => {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  const iso = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (iso) return iso[1] + "-" + String(Number(iso[2])).padStart(2, "0");
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+};
+const fmt = (n) => Math.abs(n) >= 1000
+  ? n.toLocaleString(undefined,{maximumFractionDigits:0})
+  : n.toLocaleString(undefined,{maximumFractionDigits:2});
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function detectColumns(data) {
+  const names = Object.keys(data[0] || {});
+  const sample = data.slice(0, 200);
+  const out = { dateCols:[], numCols:[], catCols:[] };
+  names.forEach((c) => {
+    let dateHits=0, numHits=0, nonEmpty=0; const uniques=new Set();
+    sample.forEach((r) => {
+      const v = r[c];
+      if (v === null || v === undefined || v === "") return;
+      nonEmpty++; uniques.add(String(v));
+      const s = String(v).trim();
+      if (!isNaN(toNum(v))) numHits++;
+      else if (/\d/.test(s) && !isNaN(Date.parse(s))) dateHits++;
+    });
+    if (!nonEmpty) return;
+    if (dateHits/nonEmpty > 0.7) out.dateCols.push(c);
+    else if (numHits/nonEmpty > 0.8) out.numCols.push(c);
+    else if (uniques.size <= Math.max(20, nonEmpty*0.5)) out.catCols.push(c);
+  });
+  return out;
+}
+
+function buildSummary() {
+  const vals = rows.map(r => toNum(r[metricCol])).filter(n => !isNaN(n));
+  const total = vals.reduce((a,b)=>a+b,0);
+  const avg = vals.length ? total/vals.length : 0;
+  let monthly = [];
+  if (dateCol) {
+    const byMonth = {};
+    rows.forEach((r) => {
+      const key = monthKey(r[dateCol]); const n = toNum(r[metricCol]);
+      if (key === null || isNaN(n)) return;
+      byMonth[key] = (byMonth[key]||0) + n;
+    });
+    monthly = Object.entries(byMonth).sort(([a],[b])=>a.localeCompare(b))
+      .map(([month,value]) => ({month, value: Math.round(value*100)/100}));
+  }
+  let byCategory = [], categoryCount = 0;
+  if (catCol) {
+    const m = {};
+    rows.forEach((r) => {
+      const n = toNum(r[metricCol]); if (isNaN(n)) return;
+      const k = String(r[catCol] ?? "").trim() || "(blank)";
+      m[k] = (m[k]||0) + n;
+    });
+    const all = Object.entries(m).map(([name,value])=>({name, value: Math.round(value*100)/100}))
+      .sort((a,b)=>b.value-a.value);
+    categoryCount = all.length;
+    byCategory = all.slice(0,8);
+  }
+  let momPct = null;
+  if (monthly.length >= 2) {
+    const last = monthly[monthly.length-1].value, prev = monthly[monthly.length-2].value;
+    if (prev !== 0) momPct = ((last-prev)/Math.abs(prev))*100;
+  }
+  const best = monthly.length ? monthly.reduce((a,b)=>b.value>a.value?b:a) : null;
+  const worst = monthly.length ? monthly.reduce((a,b)=>b.value<a.value?b:a) : null;
+  summary = { rowCount: rows.length, valueCount: vals.length, total, avg,
+              monthly, byCategory, categoryCount, momPct, best, worst };
+}
+
+/* ---------------- load & render ---------------- */
+function loadCsvText(text, name) {
+  $("parseError").classList.add("hidden");
+  Papa.parse(text, {
+    header: true, skipEmptyLines: true,
+    complete: (res) => {
+      const data = res.data.filter(r => Object.values(r).some(v => v !== ""));
+      if (!data.length) return showParseError("That file parsed to zero rows. Check that it has a header row and data.");
+      const det = detectColumns(data);
+      if (!det.numCols.length) return showParseError("No numeric column found. Plainsight Data analysis needs at least one column of numbers (revenue, units, amount…).");
+      rows = data; fileName = name; cols = det;
+      dateCol = det.dateCols[0] || "";
+      const moneyish = det.numCols.find(c => /rev|sale|amount|total|price|income/i.test(c));
+      metricCol = moneyish || det.numCols[0];
+      catCol = det.catCols[0] || "";
+      insights = null;
+      $("uploadSec").classList.add("hidden");
+      $("dash").classList.remove("hidden");
+      $("headerBtns").classList.remove("hidden");
+      fillPickers(); renderAll();
+    },
+    error: () => showParseError("Couldn't parse that file. Make sure it's a CSV.")
+  });
+}
+function showParseError(msg){ const e=$("parseError"); e.textContent=msg; e.classList.remove("hidden"); }
+function loadSample(){ loadCsvText(SAMPLE_CSV, "sample-coffee-sales.csv"); }
+
+function fillPickers() {
+  // The value attribute is explicit: without it a column name with surrounding
+  // whitespace comes back trimmed and no longer matches the CSV header key.
+  const fill = (sel, list, val) => { sel.innerHTML = list.map(c=>`<option value="${esc(c)}" ${c===val?"selected":""}>${esc(c)}</option>`).join(""); };
+  fill($("metricSel"), cols.numCols, metricCol);
+  $("dateWrap").style.display = cols.dateCols.length ? "" : "none";
+  if (cols.dateCols.length) fill($("dateSel"), cols.dateCols, dateCol);
+  $("catWrap").style.display = cols.catCols.length ? "" : "none";
+  if (cols.catCols.length) fill($("catSel"), cols.catCols, catCol);
+  $("metricSel").onchange = e => { metricCol = e.target.value; renderAll(); };
+  $("dateSel").onchange = e => { dateCol = e.target.value; renderAll(); };
+  $("catSel").onchange = e => { catCol = e.target.value; renderAll(); };
+}
+
+function renderAll() {
+  buildSummary();
+  $("fileMeta").textContent = fileName + " · " + summary.rowCount + " rows";
+  $("receiptHead").textContent = "***** summary · " + metricCol + " *****";
+  const s = summary;
+  let html = `
+    <div class="stat"><div class="label">TOTAL</div><div class="value">${fmt(s.total)}</div>
+      ${s.momPct===null?"":`<div class="sub ${s.momPct>=0?"gain":"loss"}">${s.momPct>=0?"▲":"▼"} ${Math.abs(s.momPct).toFixed(1)}% vs prior month</div>`}</div>
+    <div class="stat"><div class="label">AVG / ROW</div><div class="value">${fmt(s.avg)}</div>
+      ${s.valueCount === s.rowCount ? "" : `<div class="sub">over ${fmt(s.valueCount)} rows with a value</div>`}</div>`;
+  if (s.best) html += `<div class="stat"><div class="label">BEST MONTH</div><div class="value">${esc(s.best.month)}</div><div class="sub gain">${fmt(s.best.value)}</div></div>`;
+  if (s.worst) html += `<div class="stat"><div class="label">SLOWEST</div><div class="value">${esc(s.worst.month)}</div><div class="sub loss">${fmt(s.worst.value)}</div></div>`;
+  $("stats").innerHTML = html;
+  renderCharts();
+}
+
+function renderCharts() {
+  const ink = "#17322B", line = "#D8E2DC", soft = "#4C6159", fillCol = "rgba(227,240,232,0.9)";
+  const monoFont = { family: "'IBM Plex Mono', monospace", size: 11 };
+  if (timeChartObj) { timeChartObj.destroy(); timeChartObj = null; }
+  if (catChartObj) { catChartObj.destroy(); catChartObj = null; }
+  const showTime = summary.monthly.length > 1;
+  $("timeCard").style.display = showTime ? "" : "none";
+  if (showTime) {
+    $("timeTitle").textContent = metricCol + " by month";
+    timeChartObj = new Chart($("timeChart"), {
+      type: "line",
+      data: { labels: summary.monthly.map(m=>m.month),
+        datasets: [{ data: summary.monthly.map(m=>m.value), borderColor: ink, borderWidth: 2,
+          backgroundColor: fillCol, fill: true, tension: 0.35, pointRadius: 2 }] },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} },
+        scales:{ x:{ ticks:{font:monoFont,color:soft}, grid:{color:line} },
+                 y:{ ticks:{font:monoFont,color:soft}, grid:{color:line} } } }
+    });
+  }
+  const showCat = summary.byCategory.length > 1;
+  $("catCard").style.display = showCat ? "" : "none";
+  if (showCat) {
+    $("catTitle").textContent = metricCol + " by " + catCol
+      + (summary.categoryCount > summary.byCategory.length ? ` (top ${summary.byCategory.length} of ${summary.categoryCount})` : "");
+    catChartObj = new Chart($("catChart"), {
+      type: "bar",
+      data: { labels: summary.byCategory.map(c=>c.name),
+        datasets: [{ data: summary.byCategory.map(c=>c.value), backgroundColor: ink, borderRadius: 3 }] },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} },
+        scales:{ x:{ ticks:{font:monoFont,color:soft,maxRotation:20}, grid:{display:false} },
+                 y:{ ticks:{font:monoFont,color:soft}, grid:{color:line} } } }
+    });
+  }
+}
+
+/* ---------------- Claude ---------------- */
+function summaryForPrompt() {
+  const s = summary;
+  return JSON.stringify({
+    metric: metricCol, dateColumn: dateCol || null, categoryColumn: catCol || null,
+    rowCount: s.rowCount, rowsWithAValue: s.valueCount,
+    total: Math.round(s.total*100)/100,
+    averagePerRow: Math.round(s.avg*100)/100,
+    monthOverMonthPct: s.momPct===null?null:Math.round(s.momPct*10)/10,
+    bestMonth: s.best, worstMonth: s.worst,
+    monthlyTotals: s.monthly,
+    topCategories: s.byCategory, totalCategoryCount: s.categoryCount
+  });
+}
+
+/* ---------------- analyst providers ---------------- */
+// Three places the analysis can run. "claude" is the hosted path that only
+// resolves inside Claude (no key, needs the proxy); the other two talk to a
+// model server on this machine, so nothing leaves it.
+
+const CFG_KEY = "plainsight.analyst";
+
+const withTimeout = (url, init, ms) => {
+  // Local generation is slow, but it can also hang outright — without an abort
+  // the UI would spin forever with no way back.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+};
+
+async function httpError(res, who) {
+  let detail = "";
+  try { detail = (await res.json())?.error?.message || ""; } catch { /* not JSON */ }
+  if (res.status === 404) return `${who} doesn't have that model loaded (404).${detail ? " " + detail : ""}`;
+  if (res.status === 429) return `${who} is rate limited. Wait a moment and try again.`;
+  return `${who} returned ${res.status}${detail ? ": " + detail : ""}`;
+}
+
+const PROVIDERS = {
+  claude: {
+    label: "Claude (in-app)",
+    remote: true,
+    docs: "This path only works when the page is running inside Claude, which proxies the request. Elsewhere, use Copy prompt for Claude, or switch to Ollama or LM Studio.",
+    async listModels() { return ["claude-opus-5"]; },
+    async chat(baseUrl, model, prompt, ms) {
+      const res = await withTimeout("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: model || "claude-opus-5", max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }] })
+      }, ms);
+      if (!res.ok) throw new Error(await httpError(res, "Claude"));
+      const data = await res.json();
+      return (data.content||[]).map(b=>b.text||"").join("\n").trim();
+    }
+  },
+
+  ollama: {
+    label: "Ollama (local)",
+    defaultBaseUrl: "http://localhost:11434",
+    docs: "Start it with `ollama serve`, then pull a model, e.g. `ollama pull llama3.1`.",
+    corsHint: "If it fails with a network error, restart Ollama with OLLAMA_ORIGINS set to allow this page (`*` while trying it out).",
+    async listModels(baseUrl) {
+      const res = await withTimeout(`${baseUrl}/api/tags`, {}, 8000);
+      if (!res.ok) throw new Error(`Ollama replied ${res.status}`);
+      const names = ((await res.json()).models || []).map(m => m.name).filter(Boolean);
+      // /api/tags also lists embedding models, which can't hold a conversation —
+      // and they sort first often enough that auto-select would land on one and
+      // fail at chat time for no visible reason. Ask which can actually talk.
+      const checked = await Promise.all(names.map(async (name) => {
+        try {
+          const r = await withTimeout(`${baseUrl}/api/show`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: name })
+          }, 8000);
+          if (!r.ok) return name;                      // can't tell — keep it
+          const caps = (await r.json()).capabilities;
+          if (!Array.isArray(caps)) return name;       // older Ollama — keep it
+          return caps.includes("completion") ? name : null;
+        } catch { return name; }
+      }));
+      return checked.filter(Boolean);
+    },
+    async chat(baseUrl, model, prompt, ms) {
+      const res = await withTimeout(`${baseUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }],
+          stream: false, options: { temperature: 0.2 } })
+      }, ms);
+      if (!res.ok) throw new Error(await httpError(res, "Ollama"));
+      return ((await res.json()).message?.content || "").trim();
+    }
+  },
+
+  lmstudio: {
+    label: "LM Studio (local)",
+    defaultBaseUrl: "http://localhost:1234",
+    docs: "In LM Studio open the Developer tab, load a model, and click Start Server.",
+    corsHint: "If it fails with a network error, enable CORS in LM Studio's server settings.",
+    async listModels(baseUrl) {
+      const res = await withTimeout(`${baseUrl}/v1/models`, {}, 8000);
+      if (!res.ok) throw new Error(`LM Studio replied ${res.status}`);
+      return ((await res.json()).data || []).map(m => m.id).filter(Boolean);
+    },
+    async chat(baseUrl, model, prompt, ms) {
+      const res = await withTimeout(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }],
+          stream: false, temperature: 0.2, max_tokens: 1000 })
+      }, ms);
+      if (!res.ok) throw new Error(await httpError(res, "LM Studio"));
+      return ((await res.json()).choices?.[0]?.message?.content || "").trim();
+    }
+  }
+};
+
+const trimUrl = (u) => (u || "").trim().replace(/\/+$/, "");
+
+let cfg = (() => {
+  const fallback = { provider: "claude", baseUrl: "", model: "", timeoutMs: 120000 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(CFG_KEY) || "null");
+    return saved ? { ...fallback, ...saved } : fallback;
+  } catch { return fallback; }
+})();
+let models = [], conn = { state: "unknown", message: "" };
+
+function saveCfg() {
+  try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch { /* private mode */ }
+}
+
+async function askAI(prompt) {
+  const p = PROVIDERS[cfg.provider];
+  if (!p) throw new Error("Pick an analyst in settings.");
+  if (!p.remote && !cfg.model) throw new Error("Pick a model in settings.");
+  try {
+    const text = await p.chat(trimUrl(cfg.baseUrl), cfg.model, prompt, cfg.timeoutMs);
+    if (!text) throw new Error("The model returned an empty response.");
+    return text;
+  } catch (e) {
+    if (e.name === "AbortError") {
+      throw new Error(`${p.label} didn't respond within ${Math.round(cfg.timeoutMs/1000)}s. `
+        + "A smaller model, or a longer timeout, usually fixes this.");
+    }
+    // fetch() rejects with a bare TypeError for "nothing listening" and "blocked
+    // by CORS" alike, and the browser won't say which — so cover both.
+    if (e instanceof TypeError) {
+      throw new Error(p.remote
+        ? `Couldn't reach Claude. ${p.docs}`
+        : `Couldn't reach ${p.label} at ${trimUrl(cfg.baseUrl)}. ${p.corsHint}`);
+    }
+    throw e;
+  }
+}
+
+// Local models follow "reply with only JSON" far less reliably than a hosted
+// frontier model, so pull the object out of whatever wrapping they add.
+function extractJsonObject(raw) {
+  const cleaned = raw.replace(/```json/gi, "```").split("```").join("\n").trim();
+  const start = cleaned.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) {
+      try { return JSON.parse(cleaned.slice(start, i + 1)); } catch { return null; }
+    }
+  }
+  return null;
+}
+
+async function runInsights() {
+  const btn = $("insightBtn");
+  btn.disabled = true; btn.textContent = "Reading your numbers…";
+  $("insightError").classList.add("hidden"); $("insightHint").classList.add("hidden");
+  try {
+    const raw = await askAI(
+      `You are a plain-English business analyst for a small business owner with no data background. ` +
+      `Here is a summary of their data (metric: "${metricCol}"):\n` + summaryForPrompt() + `\n\n` +
+      `Respond ONLY with JSON, no markdown fences, no commentary before or after, in this shape: ` +
+      `{"headline": "one-sentence big picture", "insights": [{"title": "short label", "detail": "2-3 plain sentences with concrete numbers"}], "watchout": "one risk or thing to check"}. ` +
+      `Give 3 to 5 insights. Use everyday language, no jargon.`);
+    const parsed = extractJsonObject(raw);
+    // Smaller local models often ignore "JSON only". The prose is still useful,
+    // so show it rather than throwing the whole answer away.
+    insights = parsed && parsed.headline ? parsed : {
+      headline: "The model replied in prose rather than the expected format.",
+      insights: [{ title: "Model output", detail: raw }],
+      watchout: ""
+    };
+    let html = `<div class="headline">${esc(insights.headline)}</div><div class="cards">`;
+    (insights.insights||[]).forEach(it => {
+      html += `<div class="card"><div class="tag">${esc(it.title)}</div><div class="body">${esc(it.detail)}</div></div>`;
+    });
+    if (insights.watchout) html += `<div class="card warn"><div class="tag">Worth checking</div><div class="body">${esc(insights.watchout)}</div></div>`;
+    $("insightOut").innerHTML = html + "</div>";
+  } catch(e) {
+    const err = $("insightError"); err.textContent = e.message; err.classList.remove("hidden");
+  } finally {
+    btn.textContent = insights ? "Explain again" : "Explain my data";
+    renderSettings();   // restores the disabled state from readiness
+  }
+}
+
+async function runQuestion() {
+  const input = $("qInput"), q = input.value.trim();
+  if (!q) return;
+  const btn = $("askBtn"); btn.disabled = true; input.value = "";
+  const list = $("qaList");
+  const item = document.createElement("div");
+  item.className = "card qa-item";
+  item.innerHTML = `<div class="q">Q: ${esc(q)}</div><div class="body">Thinking it over…</div>`;
+  list.appendChild(item);
+  try {
+    const a = await askAI(
+      `You are answering a small business owner's question about their data. ` +
+      `Data summary (metric: "${metricCol}"):\n` + summaryForPrompt() + `\n\n` +
+      `Question: ${q}\n\nAnswer in 2-4 plain sentences with concrete numbers where possible. ` +
+      `If the summary can't answer it, say what extra data would be needed. No markdown.`);
+    item.querySelector(".body").textContent = a;
+  } catch(e) {
+    item.querySelector(".body").textContent = e.message;
+    item.classList.add("warn");
+  } finally { renderSettings(); }
+}
+
+/* ---------------- settings UI ---------------- */
+function renderSettings() {
+  const p = PROVIDERS[cfg.provider];
+  const local = !p.remote;
+
+  $("providerSel").innerHTML = Object.entries(PROVIDERS)
+    .map(([k, v]) => `<option value="${k}" ${k === cfg.provider ? "selected" : ""}>${esc(v.label)}</option>`).join("");
+
+  // A hosted analyst has no address, no model list and no timeout worth tuning.
+  $("addressRow").style.display = local ? "" : "none";
+  $("modelRow").style.display   = local ? "" : "none";
+  $("timeoutRow").style.display = local ? "" : "none";
+
+  $("baseUrlInput").value = cfg.baseUrl;
+  $("timeoutInput").value = Math.round(cfg.timeoutMs / 1000);
+
+  const haveModels = models.length > 0;
+  $("modelSel").classList.toggle("hidden", !haveModels);
+  $("modelHint").classList.toggle("hidden", haveModels);
+  if (haveModels) {
+    $("modelSel").innerHTML = models
+      .map(m => `<option value="${esc(m)}" ${m === cfg.model ? "selected" : ""}>${esc(m)}</option>`).join("");
+  }
+
+  const dotClass = "dot " + (conn.state === "unknown" ? "" : conn.state);
+  $("connDot").className = dotClass;
+  $("connDot2").className = dotClass;
+  $("connLabel").textContent = aiReady()
+    ? (local ? `${p.label.replace(/ \(.*\)$/, "")} · ${cfg.model}` : p.label)
+    : conn.state === "checking" ? "Connecting…" : "No model";
+  $("connMessage").textContent = conn.message || `Not connected yet. ${p.docs}`;
+  $("settingsPanel").querySelector(".settings-status").className =
+    "settings-status" + (conn.state === "unknown" ? "" : " " + conn.state);
+
+  const ready = aiReady();
+  $("insightBtn").disabled = !ready;
+  $("askBtn").disabled = !ready;
+  $("needsModel").classList.toggle("hidden", ready || !$("settingsPanel").classList.contains("hidden"));
+}
+
+function aiReady() {
+  const p = PROVIDERS[cfg.provider];
+  if (!p) return false;
+  if (p.remote) return true;              // hosted: assume reachable, fail loudly if not
+  return conn.state === "ok" && !!cfg.model;
+}
+
+async function connect() {
+  const p = PROVIDERS[cfg.provider];
+  if (p.remote) {
+    // Nothing to probe — the hosted path either resolves at call time or doesn't.
+    models = [];
+    conn = { state: "unknown", message: p.docs };
+    renderSettings();
+    return;
+  }
+  conn = { state: "checking", message: `Looking for ${p.label}…` };
+  renderSettings();
+  try {
+    const found = await p.listModels(trimUrl(cfg.baseUrl));
+    models = found;
+    if (!found.length) {
+      conn = { state: "warn", message: `${p.label} is running but has no models loaded. ${p.docs}` };
+    } else {
+      if (!found.includes(cfg.model)) cfg.model = found[0];
+      saveCfg();
+      conn = { state: "ok", message: `${p.label} connected — ${found.length} model${found.length === 1 ? "" : "s"} available.` };
+    }
+  } catch (e) {
+    models = [];
+    const why = e.name === "AbortError" ? `${p.label} didn't respond in time.`
+      : e instanceof TypeError ? `Couldn't reach ${p.label} at ${trimUrl(cfg.baseUrl)}. ${p.corsHint}`
+      : e.message;
+    conn = { state: "bad", message: `${why} ${p.docs}` };
+  }
+  renderSettings();
+}
+
+function switchProvider(next) {
+  // Address and model belong to the old provider — reset both, or we'd point
+  // LM Studio's client at Ollama's port.
+  cfg.provider = next;
+  cfg.baseUrl = PROVIDERS[next].defaultBaseUrl || "";
+  cfg.model = "";
+  models = [];
+  conn = { state: "unknown", message: "" };
+  saveCfg();
+  connect();
+}
+
+/* ---------------- copy prompt for a Claude chat ---------------- */
+// The API path needs a proxy that only exists inside Claude. This is the
+// no-API path: build the same analysis request as readable text so it can be
+// pasted straight into a chat box. Deliberately prose, not the JSON blob the
+// API gets — a person has to be able to read it before pasting it anywhere.
+function plainSummaryText() {
+  const s = summary, L = [];
+  L.push(`Metric: ${metricCol}`);
+  L.push(`Rows analyzed: ${s.rowCount}` + (s.valueCount === s.rowCount ? "" : ` (${s.valueCount} had a value; the rest were blank)`));
+  L.push(`Total: ${fmt(s.total)}`);
+  L.push(`Average per row: ${fmt(s.avg)}`);
+  if (s.momPct !== null) L.push(`Latest month vs the month before: ${s.momPct >= 0 ? "+" : ""}${s.momPct.toFixed(1)}%`);
+  if (s.best)  L.push(`Best month: ${s.best.month} (${fmt(s.best.value)})`);
+  if (s.worst) L.push(`Slowest month: ${s.worst.month} (${fmt(s.worst.value)})`);
+  if (s.monthly.length) {
+    L.push("", `${metricCol} by month:`);
+    s.monthly.forEach(m => L.push(`  ${m.month}   ${fmt(m.value)}`));
+  }
+  if (s.byCategory.length) {
+    L.push("", s.categoryCount > s.byCategory.length
+      ? `${metricCol} by ${catCol} (top ${s.byCategory.length} of ${s.categoryCount}):`
+      : `${metricCol} by ${catCol}:`);
+    s.byCategory.forEach(c => L.push(`  ${c.name}   ${fmt(c.value)}`));
+  }
+  return L.join("\n");
+}
+
+function buildChatPrompt(question) {
+  const intro = "I run a small business and I'm trying to understand my numbers. " +
+    "Below is a summary of my data — aggregate totals only, no individual transactions.";
+  const ask = question
+    ? `My question: ${question}\n\nAnswer in 2-4 plain sentences, using the numbers above where you can. ` +
+      `If the summary can't answer it, tell me what extra data I'd need. Everyday language, no jargon.`
+    : `Please explain this in plain English: what's growing, what's slipping, and what I should check next. ` +
+      `Give me 3-5 concrete observations that quote the actual numbers, then one thing worth watching out for. ` +
+      `Everyday language — no jargon, no spreadsheet formulas.`;
+  return `${intro}\n\n${plainSummaryText()}\n\n${ask}`;
+}
+
+async function copyToClipboard(text) {
+  // navigator.clipboard is undefined in non-secure contexts, which includes
+  // file:// in some browsers — so always keep the execCommand path around.
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+
+let lastPrompt = "";
+
+async function copyForClaude(question) {
+  if (!summary) return;
+  lastPrompt = buildChatPrompt(question);
+  $("promptPreview").value = lastPrompt;
+  $("promptBox").classList.remove("hidden");
+  const st = $("copyStatus");
+  const ok = await copyToClipboard(lastPrompt);
+  if (ok) {
+    st.textContent = "Copied. Paste it into Claude.";
+    st.className = "status ok";
+  } else {
+    // Never leave the user stuck: the textarea below holds the same text.
+    st.textContent = "Couldn't reach the clipboard — select the text below and copy it manually.";
+    st.className = "status warn";
+    $("promptPreview").focus();
+    $("promptPreview").select();
+  }
+}
+
+/* ---------------- export & reset ---------------- */
+function csvEscape(v){ const s=String(v??""); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+
+function exportCSV() {
+  if (!summary) return;
+  const L = [];
+  L.push("Plainsight Data analysis summary," + csvEscape(fileName));
+  L.push("Metric," + csvEscape(metricCol));
+  L.push("Rows analyzed," + summary.rowCount);
+  L.push("Rows with a value," + summary.valueCount);
+  L.push("Total," + Math.round(summary.total*100)/100);
+  L.push("Average per row," + Math.round(summary.avg*100)/100);
+  if (summary.momPct !== null) L.push("Month-over-month change %," + Math.round(summary.momPct*10)/10);
+  if (summary.monthly.length) { L.push(""); L.push("Month,Total"); summary.monthly.forEach(m=>L.push(m.month+","+m.value)); }
+  if (summary.byCategory.length) { L.push(""); L.push(csvEscape(catCol)+",Total"); summary.byCategory.forEach(c=>L.push(csvEscape(c.name)+","+c.value)); }
+  if (insights) {
+    L.push(""); L.push("AI insights,");
+    L.push("Headline," + csvEscape(insights.headline));
+    (insights.insights||[]).forEach(it=>L.push(csvEscape(it.title)+","+csvEscape(it.detail)));
+    if (insights.watchout) L.push("Worth checking," + csvEscape(insights.watchout));
+  }
+  const blob = new Blob([L.join("\n")], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "plainsight-summary-" + (fileName||"data").replace(/\.csv$/i,"") + ".csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function resetApp() {
+  rows = null; fileName = ""; summary = null; insights = null;
+  cols = { dateCols:[], numCols:[], catCols:[] };
+  dateCol = ""; metricCol = ""; catCol = "";
+  $("fileInput").value = "";
+  $("parseError").classList.add("hidden");
+  if (timeChartObj) { timeChartObj.destroy(); timeChartObj = null; }
+  if (catChartObj) { catChartObj.destroy(); catChartObj = null; }
+  $("insightOut").innerHTML = ""; $("qaList").innerHTML = "";
+  $("promptBox").classList.add("hidden"); $("promptPreview").value = ""; lastPrompt = "";
+  $("insightHint").classList.remove("hidden");
+  $("insightError").classList.add("hidden");
+  $("insightBtn").textContent = "Explain my data";
+  $("dash").classList.add("hidden");
+  $("headerBtns").classList.add("hidden");
+  $("uploadSec").classList.remove("hidden");
+}
+
+/* ---------------- wiring ---------------- */
+function toggleSettings(show) {
+  const panel = $("settingsPanel");
+  const open = show === undefined ? panel.classList.contains("hidden") : show;
+  panel.classList.toggle("hidden", !open);
+  $("settingsToggle").setAttribute("aria-expanded", String(open));
+  renderSettings();
+}
+$("settingsToggle").addEventListener("click", () => toggleSettings());
+$("settingsClose").addEventListener("click", () => toggleSettings(false));
+$("openSettingsBtn").addEventListener("click", () => toggleSettings(true));
+$("providerSel").addEventListener("change", e => switchProvider(e.target.value));
+$("modelSel").addEventListener("change", e => { cfg.model = e.target.value; saveCfg(); renderSettings(); });
+$("baseUrlInput").addEventListener("change", e => { cfg.baseUrl = e.target.value; saveCfg(); });
+$("baseUrlInput").addEventListener("keydown", e => { if (e.key === "Enter") { cfg.baseUrl = e.target.value; saveCfg(); connect(); } });
+$("connectBtn").addEventListener("click", () => { cfg.baseUrl = $("baseUrlInput").value; saveCfg(); connect(); });
+$("timeoutInput").addEventListener("change", e => {
+  const secs = Number(e.target.value);
+  if (Number.isFinite(secs) && secs > 0) { cfg.timeoutMs = secs * 1000; saveCfg(); }
+});
+
+$("copyPromptBtn").addEventListener("click", () => copyForClaude(""));
+$("copyQuestionBtn").addEventListener("click", () => {
+  const q = $("qInput").value.trim();
+  copyForClaude(q);   // no question typed still gives the general readout prompt
+});
+$("copyAgainBtn").addEventListener("click", async () => {
+  const st = $("copyStatus");
+  const ok = await copyToClipboard(lastPrompt);
+  st.textContent = ok ? "Copied again." : "Couldn't reach the clipboard — select the text below.";
+  st.className = "status " + (ok ? "ok" : "warn");
+});
+$("hidePromptBtn").addEventListener("click", () => $("promptBox").classList.add("hidden"));
+
+function readFile(f) {
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => loadCsvText(ev.target.result, f.name);
+  r.onerror = () => showParseError("Couldn't read that file.");
+  r.readAsText(f);
+}
+$("fileInput").addEventListener("change", (e) => {
+  readFile(e.target.files[0]);
+  e.target.value = "";   // otherwise picking the same file twice fires no change event
+});
+const dz = $("dropZone");
+dz.addEventListener("dragover", (e)=>{ e.preventDefault(); dz.classList.add("over"); });
+dz.addEventListener("dragleave", ()=> dz.classList.remove("over"));
+dz.addEventListener("drop", (e)=>{
+  e.preventDefault(); dz.classList.remove("over");
+  readFile(e.dataTransfer.files[0]);
+});
+
+// Probe on load so a running local server is picked up without a click.
+connect();
+</script>
+</body>
 </html>
